@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WhatsApp 助手</title>
+<style>
+  :root {
+    --bg: #f5f6f7; --card: #fff; --line: #d9dde1; --text: #222;
+    --muted: #6b7280; --accent: #23C063; --danger: #cc4b45;
+    --warn: #a15c00; --bad-bg: #fdecea; --warn-bg: #fff4e0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  header {
+    background: var(--card); border-bottom: 1px solid var(--line); padding: 10px clamp(50px, 5vw, 80px);
+    display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center;
+  }
+  h1 { font-size: 18px; margin: 0; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  h3 { font-size: 14px; margin: 14px 0 6px; }
+  header nav { display: flex; gap: 28px; align-items: center; margin-left: 48px; }
+  header nav .tab {
+    background: transparent; border: 0; border-radius: 0;
+    padding: 10px 4px; color: var(--text); font-size: 17px; font-weight: 700;
+  }
+  header nav .tab.active { background: transparent; color: var(--accent); }
+  header nav .tab:hover:not(:disabled) { background: transparent; color: var(--accent); }
+  header nav .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+  .file-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+  .banner { background: var(--warn-bg); color: var(--warn); padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  .toolbar, .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .template-heading { flex-wrap: nowrap; }
+  .template-heading h2 { margin: 0; white-space: nowrap; }
+  .template-heading button { white-space: nowrap; }
+  #page-lists > .toolbar > label { margin-right: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+  button {
+    font: inherit; padding: 6px 12px; border: 1px solid var(--line);
+    background: #fff; border-radius: 6px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: #eef0f2; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.primary { background: #fff; color: var(--accent); border-color: var(--accent); }
+  button.primary:hover:not(:disabled) { background: #effbf3; }
+  button.danger { background: #fff; color: var(--danger); border-color: var(--danger); }
+  button.danger:hover:not(:disabled) { background: #fff1f0; }
+  input, select, textarea {
+    font: inherit; padding: 6px 8px; border: 1px solid var(--line);
+    border-radius: 6px; background: #fff; max-width: 100%;
+  }
+  textarea { width: 100%; resize: vertical; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-size: 13px; color: var(--muted); font-weight: 600; }
+  td input { width: 100%; }
+  td input[type="checkbox"] { width: auto; }
+  tr.invalid td { background: var(--bad-bg); }
+  tr.warn td { background: var(--warn-bg); }
+  tr.current td { background: #e6f4ee; font-weight: 600; }
+  .msg { font-size: 13px; color: var(--danger); }
+  tr.warn .msg { color: var(--warn); }
+  .muted { color: var(--muted); font-size: 13px; }
+  .preview {
+    white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 10px; min-height: 60px; margin: 0; font: inherit;
+  }
+  .status { font-size: 13px; padding: 3px 10px; border-radius: 999px; background: #eceff1; }
+  .status.saved { background: #e6f4ee; color: var(--accent); }
+  .status.dirty { background: var(--warn-bg); color: var(--warn); }
+  .status.saving { background: #e8f0fe; color: #1a4fb4; }
+  .status.failed { background: var(--bad-bg); color: var(--danger); }
+  #progress { margin-top: 8px; font-size: 14px; }
+  dialog { border: 1px solid var(--line); border-radius: 8px; padding: 20px; max-width: 460px; width: 92%; }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
+  #modalMsg { white-space: pre-wrap; }
+  #modalInput { width: 100%; margin-top: 8px; }
+  #modalButtons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>WhatsApp 助手</h1>
+  <div class="file-bar">
+    <button id="btnChooseData" hidden>選取 data 資料夾</button>
+    <button id="btnSave" class="primary" disabled hidden>儲存</button>
+    <span id="status" class="status" hidden>正在讀取資料</span>
+  </div>
+  <nav aria-label="主要導覽">
+    <button class="tab active" data-page="lists">聯絡</button>
+    <button class="tab" data-page="contacts">通訊錄</button>
+  </nav>
+</header>
+
+<div id="unsupported" class="banner" hidden>
+  請先選取 HTML 旁邊的 data 資料夾，才能使用此頁面。
+</div>
+
+<main inert>
+  <section id="page-lists">
+    <div class="toolbar">
+      <label>聯絡列表 <select id="listSelect"></select></label>
+      <button id="btnNewList" class="primary">新增</button>
+      <button id="btnRenameList">重新命名</button>
+      <button id="btnDeleteList" class="danger">刪除</button>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2 id="listTitle">未選擇聯絡列表</h2>
+        <div class="row">
+          <input id="addContactSelect" type="text" list="addContactOptions" placeholder="搜尋姓名或電話" autocomplete="off" aria-label="搜尋並選取聯絡人" />
+          <datalist id="addContactOptions"></datalist>
+          <button id="btnAddMember" class="primary">加入</button>
+        </div>
+        <table>
+          <thead><tr><th>選取</th><th>姓名</th><th>電話</th><th>狀態</th><th></th></tr></thead>
+          <tbody id="memberBody"></tbody>
+        </table>
+        <p id="memberEmpty" class="muted"></p>
+      </div>
+      <div class="card">
+        <div class="row template-heading">
+          <h2>訊息範本</h2>
+          <button id="btnAppendName">插入姓名 {name}</button>
+        </div>
+        <textarea id="template" rows="8" placeholder="你好 {name}，&#10;&#10;在此輸入共用訊息。"></textarea>
+        <h2>預覽</h2>
+        <pre id="preview" class="preview"></pre>
+        <h2>傳送</h2>
+        <div class="row">
+          <label><input type="radio" name="mode" value="web" /> WhatsApp Web</label>
+          <label><input type="radio" name="mode" value="desktop" /> 桌面應用程式</label>
+        </div>
+        <div class="row">
+          <button id="btnStart" class="primary">開始</button>
+          <button id="btnSendSelected">傳送已選</button>
+          <button id="btnNext">下一位</button>
+          <button id="btnStop" class="danger">停止</button>
+        </div>
+        <div id="progress" class="muted"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="page-contacts" hidden>
+    <div class="card">
+      <div class="toolbar">
+        <button id="btnNewContact" class="primary">新增聯絡人</button>
+        <input id="contactSearch" type="search" placeholder="搜尋姓名或電話" />
+      </div>
+      <table>
+        <thead><tr><th>姓名</th><th>電話</th><th></th></tr></thead>
+        <tbody id="contactBody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<dialog id="modal">
+  <h2 id="modalTitle"></h2>
+  <div id="modalMsg"></div>
+  <input id="modalInput" hidden />
+  <div id="modalButtons"></div>
+</dialog>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const FC = "contacts.json";
+const FL = "lists.json";
+
+/* ---------- STATE ---------- */
+const S = {
+  dir: null,
+  contacts: [],
+  lists: [],
+  settings: { mode: "web", countryCode: "852" },
+  saved: { c: "", l: "" },
+  cur: null,
+  saving: false,
+  err: null,
+  needsPermission: false,
+  session: null,
+  selected: new Set(),
+  suppress: false,
+  filter: "",
+};
+
+/* ---------- UTIL ---------- */
+function uuid() {
+  try { if (crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 15) | 64;
+  b[8] = (b[8] & 63) | 128;
+  const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const getC = (id) => S.contacts.find((c) => c.id === id);
+const curList = () => S.lists.find((l) => l.id === S.cur) || null;
+const personalise = (t, n) => t.split("{name}").join(n);
+
+function normPhone(p) {
+  let d = String(p).replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.length === 11 && d.startsWith("852")) d = d.slice(3);
+  return d;
+}
+function issue(c) {
+  const n = c.name.trim(), p = c.phone.trim();
+  if (!n && !p) return "blank";
+  if (!n) return "請填寫姓名";
+  if (!p) return "請填寫電話";
+  if (!/^\d{8}$/.test(c.phone.replace(/\D/g, ""))) return "電話須為 8 位數字";
+  return null;
+}
+function canAddContact(c) {
+  return !!c && !!c.name.trim() && /^\d{8}$/.test(c.phone.replace(/\D/g, ""));
+}
+function dupPhones() {
+  const m = {};
+  S.contacts.forEach((c) => {
+    if (issue(c)) return;
+    const p = normPhone(c.phone);
+    m[p] = (m[p] || 0) + 1;
+  });
+  return m;
+}
+
+/* ---------- SERIALISE / DIRTY ---------- */
+const pickL = (l) => ({ id: l.id, name: l.name, contactIds: [...l.contactIds], template: l.template });
+function serC() {
+  const contacts = S.contacts
+    .map((c) => ({ id: c.id, name: c.name, phone: c.phone }));
+  return JSON.stringify({ version: 1, contacts }, null, 2);
+}
+function serL() {
+  return JSON.stringify({ version: 1, settings: S.settings, lists: S.lists.map(pickL) }, null, 2);
+}
+const dirty = () => serC() !== S.saved.c || serL() !== S.saved.l;
+
+/* ---------- STATUS ---------- */
+function updateStatus() {
+  const el = $("#status");
+  const d = dirty();
+  let t = "已儲存", c = "saved";
+  if (S.saving) { t = "儲存中…"; c = "saving"; }
+  else if (d && S.err) { t = "儲存失敗"; c = "failed"; }
+  else if (d) { t = "等待自動儲存…"; c = "saving"; }
+  el.textContent = t;
+  el.className = "status " + c;
+  el.title = d && S.err ? S.err : "";
+  el.hidden = !S.dir;
+  const btn = $("#btnSave");
+  btn.hidden = !(S.dir && d && S.err);
+  btn.textContent = S.needsPermission ? "授權並儲存" : "重試儲存";
+  btn.disabled = S.saving;
+}
+let saveTimer = null;
+let savePromise = null;
+function changed() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => save(), 300);
+  updateStatus();
+}
+
+/* ---------- MODAL ---------- */
+let modalChain = Promise.resolve();
+function modal(opts) {
+  const run = modalChain.then(() => showModal(opts));
+  modalChain = run.catch(() => {});
+  return run;
+}
+function showModal({ title, message = "", input, buttons }) {
+  return new Promise((resolve) => {
+    const d = $("#modal"), inp = $("#modalInput"), bar = $("#modalButtons");
+    const hasInput = input !== undefined;
+    let done = false;
+    const finish = (val) => {
+      if (done) return;
+      done = true;
+      if (d.open) d.close();
+      resolve(hasInput ? { action: val, value: inp.value } : val);
+    };
+    $("#modalTitle").textContent = title;
+    $("#modalMsg").textContent = message;
+    inp.hidden = !hasInput;
+    inp.value = hasInput ? input : "";
+    bar.innerHTML = "";
+    buttons.forEach(([label, val, cls]) => {
+      const b = document.createElement("button");
+      b.textContent = label;
+      if (cls) b.className = cls;
+      b.onclick = () => {
+        finish(typeof val === "function" ? "ok" : val);
+        if (typeof val === "function") val();
+      };
+      bar.append(b);
+    });
+    inp.onkeydown = (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === "Enter") { e.preventDefault(); bar.firstChild.click(); }
+    };
+    d.oncancel = (e) => { e.preventDefault(); finish("cancel"); };
+    d.showModal();
+    if (hasInput) { inp.focus(); inp.select(); } else bar.firstChild.focus();
+  });
+}
+const alertMsg = (message, title = "提示") =>
+  modal({ title, message, buttons: [["確定", "ok", "primary"]] });
+async function confirmMsg(message, title = "確認", ok = "確定", cls = "primary") {
+  const r = await modal({ title, message, buttons: [[ok, "ok", cls], ["取消", "cancel"]] });
+  return r === "ok";
+}
+
+/* ---------- FILE SYSTEM ---------- */
+let lastDataFolder = null;
+async function storedDataFolder(folder) {
+  let db;
+  try {
+    db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("masswtsapp", 1);
+      request.onupgradeneeded = () => request.result.createObjectStore("preferences");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction("preferences", folder ? "readwrite" : "readonly");
+      const store = transaction.objectStore("preferences");
+      const request = folder ? store.put(folder, "dataFolder") : store.get("dataFolder");
+      transaction.oncomplete = () => resolve(folder || request.result || null);
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } catch (e) {
+    // Some browsers disallow persistent storage for locally opened HTML files.
+    return null;
+  } finally {
+    if (db) db.close();
+  }
+}
+
+async function readJson(dir, name) {
+  let file;
+  try { file = await dir.getFileHandle(name); }
+  catch (e) { if (e.name === "NotFoundError") return undefined; throw e; }
+  const text = await (await file.getFile()).text();
+  try { return JSON.parse(text); }
+  catch (e) { throw new Error(`${name} 的 JSON 格式無效`); }
+}
+
+async function openFolder() {
+  let dir;
+  try {
+    dir = await window.showDirectoryPicker({
+      id: "masswtsapp-data",
+      mode: "readwrite",
+      ...(lastDataFolder ? { startIn: lastDataFolder } : {}),
+    });
+  }
+  catch (e) {
+    if (e.name !== "AbortError") return `無法選取資料夾（${e.name}）。請使用 Chrome 或 Edge 再試一次。`;
+    return;
+  }
+  if (dir.name !== "data") return "剛才選取的資料夾不是 data，請重新選取。";
+  lastDataFolder = dir;
+  await storedDataFolder(dir);
+  let c, l;
+  try {
+    [c, l] = await Promise.all([readJson(dir, FC), readJson(dir, FL)]);
+    if ((c !== undefined && (!c || !Array.isArray(c.contacts))) ||
+        (l !== undefined && (!l || !Array.isArray(l.lists)))) {
+      throw new Error("資料檔案須包含 contacts 及 lists 陣列");
+    }
+  } catch (e) {
+    const detail = e instanceof SyntaxError || /JSON|陣列/.test(e.message)
+      ? e.message
+      : `${e.name}: ${e.message}`;
+    const guidance = `無法讀取資料（${detail}）。請確認 data 資料夾內的資料檔案內容正確，再重新選取資料夾。`;
+    updateStatus();
+    return guidance;
+  }
+
+  S.dir = dir;
+  S.err = null;
+  S.needsPermission = false;
+  S.contacts = ((c && c.contacts) || []).map((x) => ({
+    id: String(x.id || uuid()), name: String(x.name ?? ""), phone: String(x.phone ?? ""),
+  }));
+  S.settings = { mode: "web", countryCode: "852", ...((l && l.settings) || {}) };
+  const seen = new Set();
+  const uniqueName = (raw) => {
+    const base = String(raw || "").trim() || "未命名";
+    let n = base, i = 2;
+    while (seen.has(n.toLowerCase())) n = `${base} (${i++})`;
+    seen.add(n.toLowerCase());
+    return n;
+  };
+  S.lists = ((l && l.lists) || []).map((x) => ({
+    id: String(x.id || uuid()),
+    name: uniqueName(x.name),
+    contactIds: (x.contactIds || []).filter((id) => getC(id)),
+    template: String(x.template ?? ""),
+  }));
+  S.saved.c = c === undefined ? "" : JSON.stringify(c, null, 2);
+  S.saved.l = l === undefined ? "" : JSON.stringify(l, null, 2);
+  S.cur = S.lists[0] ? S.lists[0].id : null;
+  $("main").inert = false;
+  $("#unsupported").hidden = true;
+  $("#btnSave").disabled = false;
+  $("#btnChooseData").hidden = true;
+  renderAll();
+  if (dirty()) changed();
+}
+
+async function writeFile(dir, name, text) {
+  const file = await dir.getFileHandle(name, { create: true });
+  const stream = await file.createWritable();
+  try { await stream.write(text); await stream.close(); }
+  catch (e) { try { await stream.abort(); } catch (_) {} throw e; }
+}
+
+function save() {
+  clearTimeout(saveTimer);
+  if (!S.dir) return Promise.resolve(false);
+  if (savePromise) return savePromise;
+  savePromise = persistChanges().finally(() => { savePromise = null; });
+  return savePromise;
+}
+async function persistChanges() {
+  S.saving = true;
+  S.err = null;
+  S.needsPermission = false;
+  updateStatus();
+  try {
+    const options = { mode: "readwrite" };
+    if ((await S.dir.queryPermission(options)) !== "granted") {
+      const canAsk = navigator.userActivation?.isActive ?? false;
+      if (!canAsk || (await S.dir.requestPermission(options)) !== "granted") {
+        S.needsPermission = true;
+        throw new Error("permission");
+      }
+    }
+    // Save snapshots in order, including any edits made during a write.
+    // Keep unfinished contact fields so auto-save never discards typed input.
+    while (dirty()) {
+      const c = serC(), l = serL();
+      if (c !== S.saved.c) { await writeFile(S.dir, FC, c); S.saved.c = c; }
+      if (l !== S.saved.l) { await writeFile(S.dir, FL, l); S.saved.l = l; }
+    }
+  } catch (e) {
+    S.err = S.needsPermission
+      ? "需要寫入權限。請按「授權並儲存」或 Ctrl+S。"
+      : "無法儲存資料：" + (e.message || e.name);
+  }
+  S.saving = false;
+  updateStatus();
+  return !S.err;
+}
+
+/* ---------- LISTS PAGE ---------- */
+function statusOf(id) {
+  const s = S.session;
+  if (!s) return { text: "", cur: false };
+  if (s.results[id] === "sent") return { text: "已傳送", cur: false };
+  if (s.queue[s.index] === id) return { text: "目前聯絡人", cur: true };
+  return { text: s.queue.includes(id) ? "等候中" : "", cur: false };
+}
+function renderLists() {
+  const sel = $("#listSelect");
+  if (S.cur && !curList()) S.cur = null;
+  if (!S.cur && S.lists[0]) S.cur = S.lists[0].id;
+  sel.innerHTML = S.lists.length
+    ? S.lists.map((l) => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join("")
+    : `<option value="">（沒有聯絡列表）</option>`;
+  sel.value = S.cur || "";
+
+  const L = curList(), busy = !!S.session;
+  $("#listTitle").textContent = L ? L.name : "未選擇聯絡列表";
+  sel.disabled = busy;
+  $("#btnNewList").disabled = busy;
+  $("#btnRenameList").disabled = !L || busy;
+  $("#btnDeleteList").disabled = !L || busy;
+
+  const avail = S.contacts
+    .filter((c) => canAddContact(c) && L && !L.contactIds.includes(c.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const add = $("#addContactSelect");
+  $("#addContactOptions").innerHTML = avail.map((c) =>
+    `<option data-id="${esc(c.id)}" value="${esc(c.name)} (${esc(normPhone(c.phone))})"></option>`).join("");
+  add.disabled = !L || busy || !avail.length;
+  if (add.disabled) add.value = "";
+  updateAddContactButton();
+
+  const ms = L ? L.contactIds.map(getC).filter(Boolean) : [];
+  $("#memberBody").innerHTML = ms.map((c) => {
+    const st = statusOf(c.id);
+    return `<tr data-id="${esc(c.id)}" class="${st.cur ? "current" : ""}">
+      <td><input type="checkbox" data-select ${S.selected.has(c.id) ? "checked" : ""} ${busy ? "disabled" : ""} aria-label="選取 ${esc(c.name)}" /></td>
+      <td>${esc(c.name)}</td><td>${esc(normPhone(c.phone))}</td><td>${st.text}</td>
+      <td><button class="danger" data-act="remove" ${busy ? "disabled" : ""}>移除</button></td></tr>`;
+  }).join("");
+  $("#memberEmpty").textContent = !L
+    ? "按下「新增」建立聯絡列表。"
+    : ms.length ? `${ms.length} 位收件人` : "尚未有收件人。請使用下拉選單加入聯絡人。";
+
+  const t = $("#template");
+  if (document.activeElement !== t) t.value = L ? L.template : "";
+  t.disabled = !L;
+  $("#btnAppendName").disabled = !L;
+  document.querySelectorAll('input[name="mode"]').forEach((r) => {
+    r.checked = r.value === S.settings.mode;
+    r.disabled = busy;
+  });
+  renderPreview();
+  renderSend();
+}
+function renderPreview() {
+  const L = curList();
+  let c = null;
+  if (S.session) c = getC(S.session.queue[S.session.index]);
+  else if (L) c = L.contactIds.map(getC).find(Boolean);
+  const name = c ? c.name.trim() : "小明";
+  $("#preview").textContent = L ? personalise(L.template, name) : "";
+}
+function renderSend() {
+  const s = S.session, L = curList();
+  $("#btnStart").disabled = !!s || !L || !L.contactIds.some((id) => getC(id));
+  $("#btnSendSelected").disabled = !!s || !L || !L.contactIds.some((id) => S.selected.has(id) && getC(id));
+  ["#btnNext", "#btnStop"].forEach((x) => ($(x).disabled = !s));
+  const next = s && getC(s.queue[s.index + 1]);
+  $("#btnNext").textContent = next ? `下一位 ${next.name.trim()}` : "下一位";
+  const c = s && getC(s.queue[s.index]);
+  $("#progress").textContent = s ? `第 ${s.index + 1} 位／共 ${s.queue.length} 位：${c ? c.name : ""}` : "";
+}
+
+async function askName(title, init, selfId) {
+  for (;;) {
+    const r = await modal({
+      title, message: "名稱", input: init,
+      buttons: [["確定", "ok", "primary"], ["取消", "cancel"]],
+    });
+    if (r.action !== "ok") return null;
+    const n = r.value.trim();
+    if (!n) { await alertMsg("名稱不能留空。"); continue; }
+    const dup = S.lists.some((l) => l.id !== selfId && l.name.trim().toLowerCase() === n.toLowerCase());
+    if (dup) {
+      await alertMsg(`已有名為「${n}」的聯絡列表，請使用其他名稱。`, "名稱重複");
+      init = n;
+      continue;
+    }
+    return n;
+  }
+}
+
+/* ---------- CONTACTS PAGE ---------- */
+function renderContacts() {
+  const f = S.filter.toLowerCase();
+  const rows = S.contacts.filter((c) => !f || c.name.toLowerCase().includes(f) || c.phone.includes(f));
+  $("#contactBody").innerHTML = rows.map((c) => `<tr data-id="${esc(c.id)}">
+      <td><input data-f="name" value="${esc(c.name)}" /></td>
+      <td><input data-f="phone" inputmode="tel" value="${esc(c.phone)}" /></td>
+      <td><button class="danger" data-act="del">刪除</button></td></tr>`).join("") ||
+    `<tr><td colspan="3" class="muted">尚未有聯絡人。</td></tr>`;
+  refreshIssues();
+}
+function refreshIssues() {
+  const d = dupPhones();
+  document.querySelectorAll("#contactBody tr[data-id]").forEach((tr) => {
+    const c = getC(tr.dataset.id), i = issue(c);
+    let cls = "", m = "";
+    if (i && i !== "blank") { cls = "invalid"; m = i; }
+    else if (!i && d[normPhone(c.phone)] > 1) { cls = "warn"; m = "電話號碼重複"; }
+    tr.className = cls;
+    tr.title = m;
+    tr.querySelector('[data-f="name"]').title = m;
+    tr.querySelector('[data-f="phone"]').title = m;
+  });
+}
+async function deleteContact(id) {
+  const c = getC(id);
+  if (S.session && S.session.queue.includes(id)) return alertMsg("正在向此聯絡人傳送訊息。請先停止傳送。");
+  const used = S.lists.filter((l) => l.contactIds.includes(id));
+  if (issue(c) !== "blank") {
+    const msg = `要刪除${c.name.trim() || "此聯絡人"}嗎？` +
+      (used.length ? `\n\n此聯絡人亦會從以下列表移除：${used.map((l) => l.name).join("、")}` : "");
+    if (!(await confirmMsg(msg, "刪除聯絡人", "刪除", "danger"))) return;
+  }
+  used.forEach((l) => (l.contactIds = l.contactIds.filter((x) => x !== id)));
+  S.contacts = S.contacts.filter((x) => x.id !== id);
+  S.selected.delete(id);
+  renderContacts();
+  renderLists();
+  changed();
+  await save();
+}
+
+/* ---------- SENDING ---------- */
+function link(c, text) {
+  const p = "852" + normPhone(c.phone);
+  const t = encodeURIComponent(personalise(text, c.name.trim()));
+  return S.settings.mode === "desktop"
+    ? `whatsapp://send?phone=${p}&text=${t}`
+    : `https://web.whatsapp.com/send?phone=${p}&text=${t}`;
+}
+function openCurrent() {
+  const s = S.session, c = getC(s.queue[s.index]);
+  const url = link(c, curList().template);
+  if (S.settings.mode === "desktop") {
+    S.suppress = true;
+    location.href = url;
+    setTimeout(() => (S.suppress = false), 1500);
+  } else {
+    const w = window.open(url, "wa_helper");
+    if (!w) alertMsg("瀏覽器已封鎖 WhatsApp 分頁。請允許此頁面的彈出式視窗，停止後重新開始傳送。", "彈出式視窗被封鎖");
+  }
+  renderLists();
+}
+async function startSending(selectedOnly = false) {
+  const L = curList();
+  if (!L || S.session) return;
+  const ms = L.contactIds.filter((id) => !selectedOnly || S.selected.has(id)).map(getC).filter(Boolean);
+  if (!ms.length) return;
+  const bad = ms.filter((c) => issue(c));
+  if (bad.length) return alertMsg("請先修正以下聯絡人的資料：" + bad.map((c) => c.name || "（未填姓名）").join("、"));
+  if (!L.template.trim()) return alertMsg("訊息範本不能留空。");
+  const ok = await confirmMsg(
+    `要向「${L.name}」中的 ${ms.length} 位聯絡人傳送訊息嗎？\n\n請逐一在 WhatsApp 按下傳送，再回到此頁按「下一位」確認已傳送並繼續。`,
+    "開始傳送", "開始");
+  if (!ok) return;
+  S.session = { listId: L.id, queue: ms.map((c) => c.id), index: 0, results: {} };
+  openCurrent();
+}
+function advance(result) {
+  const s = S.session;
+  if (!s) return;
+  s.results[s.queue[s.index]] = result;
+  s.index++;
+  if (s.index >= s.queue.length) return finishSession(true);
+  openCurrent();
+}
+function finishSession(completed) {
+  const r = Object.values(S.session.results);
+  const sent = r.filter((x) => x === "sent").length;
+  const total = S.session.queue.length;
+  S.session = null;
+  renderLists();
+  alertMsg(
+    `${completed ? "已完成" : "已停止"}。\n已傳送：${sent}\n尚未處理：${total - sent}`,
+    "傳送摘要"
+  );
+}
+async function stopSending() {
+  if (!S.session) return;
+  const ok = await confirmMsg("要停止傳送嗎？進度將會清除。", "停止傳送", "停止", "danger");
+  if (ok) finishSession(false);
+}
+
+/* ---------- PAGES ---------- */
+function showPage(p) {
+  $("#page-lists").hidden = p !== "lists";
+  $("#page-contacts").hidden = p !== "contacts";
+  document.querySelectorAll(".tab").forEach((b) =>
+    b.classList.toggle("active", b.dataset.page === p));
+  if (p === "contacts") renderContacts();
+  else renderLists();
+}
+function renderAll() {
+  renderLists();
+  renderContacts();
+  updateStatus();
+}
+
+/* ---------- EVENTS ---------- */
+document.querySelectorAll(".tab").forEach((b) =>
+  b.addEventListener("click", () => showPage(b.dataset.page)));
+$("#btnSave").onclick = save;
+$("#btnChooseData").onclick = openFolder;
+
+$("#listSelect").onchange = (e) => {
+  S.cur = e.target.value;
+  S.selected.clear();
+  renderLists();
+};
+$("#btnNewList").onclick = async () => {
+  const n = await askName("新增聯絡列表", "", null);
+  if (!n) return renderLists();
+  const L = { id: uuid(), name: n, contactIds: [], template: "你好 {name}，\n\n" };
+  S.lists.push(L);
+  S.cur = L.id;
+  S.selected.clear();
+  renderLists();
+  changed();
+  await save();
+};
+$("#btnRenameList").onclick = async () => {
+  const L = curList();
+  if (!L) return;
+  const n = await askName("重新命名聯絡列表", L.name, L.id);
+  if (!n) return;
+  L.name = n;
+  renderLists();
+  changed();
+  await save();
+};
+$("#btnDeleteList").onclick = async () => {
+  const L = curList();
+  if (!L) return;
+  const ok = await confirmMsg(
+    `要刪除聯絡列表「${L.name}」嗎？\n通訊錄中的聯絡人不會被刪除。`, "刪除聯絡列表", "刪除", "danger");
+  if (!ok) return;
+  S.lists = S.lists.filter((l) => l.id !== L.id);
+  S.cur = null;
+  S.selected.clear();
+  renderLists();
+  changed();
+  await save();
+};
+function selectedAddContactId() {
+  const value = $("#addContactSelect").value.trim();
+  const option = [...$("#addContactOptions").options].find((o) => o.value === value);
+  return option && canAddContact(getC(option.dataset.id)) ? option.dataset.id : null;
+}
+function updateAddContactButton() {
+  $("#btnAddMember").disabled = $("#addContactSelect").disabled || !selectedAddContactId();
+}
+$("#addContactSelect").oninput = updateAddContactButton;
+$("#addContactSelect").onkeydown = (e) => {
+  if (e.key !== "Enter" || e.isComposing || e.keyCode === 229 || e.target.disabled) return;
+  e.preventDefault();
+  const value = e.target.value.trim().toLowerCase();
+  const options = [...$("#addContactOptions").options];
+  const option = options.find((o) => o.value.toLowerCase() === value) ||
+    options.find((o) => o.value.toLowerCase().includes(value));
+  if (!option) return;
+  e.target.value = option.value;
+  updateAddContactButton();
+  $("#btnAddMember").click();
+};
+$("#btnAddMember").onclick = async () => {
+  const L = curList(), id = selectedAddContactId();
+  if (!L || !id || !canAddContact(getC(id)) || S.session || L.contactIds.includes(id)) return;
+  L.contactIds.push(id);
+  $("#addContactSelect").value = "";
+  renderLists();
+  changed();
+  await save();
+};
+$("#memberBody").onclick = async (e) => {
+  const b = e.target.closest('button[data-act="remove"]');
+  const L = curList();
+  if (!b || !L || S.session) return;
+  const id = b.closest("tr").dataset.id;
+  const c = getC(id);
+  const ok = await confirmMsg(
+    `要從聯絡列表「${L.name}」移除「${c ? c.name.trim() : "此聯絡人"}」嗎？\n通訊錄中的聯絡人不會被刪除。`,
+    "移除聯絡人", "移除", "danger");
+  if (!ok || S.session) return;
+  L.contactIds = L.contactIds.filter((x) => x !== id);
+  S.selected.delete(id);
+  renderLists();
+  changed();
+  await save();
+};
+$("#template").oninput = (e) => {
+  const L = curList();
+  if (!L) return;
+  L.template = e.target.value;
+  renderPreview();
+  changed();
+};
+$("#btnAppendName").onclick = () => {
+  const L = curList(), t = $("#template");
+  if (!L) return;
+  t.focus();
+  t.setRangeText("{name}", t.selectionStart, t.selectionEnd, "end");
+  L.template = t.value;
+  renderPreview();
+  changed();
+};
+document.querySelectorAll('input[name="mode"]').forEach((r) =>
+  r.addEventListener("change", () => {
+    S.settings.mode = r.value;
+    changed();
+  }));
+$("#btnStart").onclick = () => startSending();
+$("#btnSendSelected").onclick = () => startSending(true);
+$("#btnNext").onclick = () => advance("sent");
+$("#btnStop").onclick = stopSending;
+$("#memberBody").onchange = (e) => {
+  if (!e.target.matches("input[data-select]") || S.session) return;
+  const id = e.target.closest("tr").dataset.id;
+  if (e.target.checked) S.selected.add(id);
+  else S.selected.delete(id);
+  renderSend();
+};
+
+$("#btnNewContact").onclick = () => {
+  S.contacts.unshift({ id: uuid(), name: "", phone: "" });
+  S.filter = "";
+  $("#contactSearch").value = "";
+  renderContacts();
+  const first = $("#contactBody input");
+  if (first) first.focus();
+  changed();
+};
+$("#contactSearch").oninput = (e) => {
+  S.filter = e.target.value;
+  renderContacts();
+};
+$("#contactBody").addEventListener("input", (e) => {
+  const tr = e.target.closest("tr[data-id]");
+  if (!tr || !e.target.dataset.f) return;
+  getC(tr.dataset.id)[e.target.dataset.f] = e.target.value;
+  refreshIssues();
+  renderLists();
+  changed();
+});
+$("#contactBody").addEventListener("click", (e) => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  const id = b.closest("tr").dataset.id;
+  if (b.dataset.act === "del") deleteContact(id);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.isComposing || e.keyCode === 229) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    save();
+  }
+});
+window.addEventListener("beforeunload", (e) => {
+  if (S.suppress) return;
+  if (S.session) {
+    e.preventDefault();
+    e.returnValue = "";
+  }
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && dirty()) save();
+});
+
+/* ---------- INIT ---------- */
+renderAll();
+async function promptUntilFolderSelected() {
+  lastDataFolder = await storedDataFolder();
+  let error = "";
+  while (!S.dir) {
+    let selection;
+    await modal({
+      title: "選取 data 資料夾",
+      message: (error ? error + "\n\n" : "") + "請選取名為「data」的資料夾。若尚未建立，請在 HTML 旁邊新增 data 資料夾。",
+      buttons: [["選取 data 資料夾", () => { selection = openFolder(); } ]],
+    });
+    // The button invokes the picker directly, preserving user activation.
+    // Wait for selection and validation before deciding whether to prompt again.
+    if (selection) error = (await selection) || "";
+  }
+}
+if (window.showDirectoryPicker) {
+  promptUntilFolderSelected();
+} else {
+  $("#btnChooseData").disabled = true;
+  $("#unsupported").textContent = "此瀏覽器不支援選取資料夾。請使用 Chrome 或 Edge 開啟此頁面。";
+  $("#unsupported").hidden = false;
+  alertMsg($("#unsupported").textContent, "請更換瀏覽器");
+}
+</script>
+</body>
+</html>
